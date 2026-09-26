@@ -2,6 +2,7 @@ solution/
 .env
 lab.txt
 .venv/
+.venv313/
 src/*.egg-info/
 lab/
 **/__pycache__/

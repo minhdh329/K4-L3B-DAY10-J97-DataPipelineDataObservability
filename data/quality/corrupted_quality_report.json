@@ -1,0 +1,90 @@
+{
+  "success": false,
+  "report_name": "corrupted_quality_report",
+  "expectations": [
+    {
+      "name": "row_count",
+      "success": true,
+      "result": {
+        "observed_value": 21
+      }
+    },
+    {
+      "name": "paper_id_not_null",
+      "success": true,
+      "result": {
+        "element_count": 21,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": []
+      }
+    },
+    {
+      "name": "title_not_null",
+      "success": true,
+      "result": {
+        "element_count": 21,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": []
+      }
+    },
+    {
+      "name": "text_for_embedding_not_null",
+      "success": true,
+      "result": {
+        "element_count": 21,
+        "unexpected_count": 0,
+        "unexpected_percent": 0.0,
+        "partial_unexpected_list": []
+      }
+    },
+    {
+      "name": "paper_id_unique",
+      "success": false,
+      "result": {
+        "element_count": 21,
+        "unexpected_count": 4,
+        "unexpected_percent": 19.047619047619047,
+        "partial_unexpected_list": [
+          "10.28932/jutisi.v12i2.13099",
+          "10.20944/preprints202608.1849.v1",
+          "10.28932/jutisi.v12i2.13099",
+          "10.20944/preprints202608.1849.v1"
+        ],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 19.047619047619047,
+        "unexpected_percent_nonmissing": 19.047619047619047
+      }
+    },
+    {
+      "name": "summary_min_length",
+      "success": false,
+      "result": {
+        "element_count": 21,
+        "unexpected_count": 4,
+        "unexpected_percent": 19.047619047619047,
+        "partial_unexpected_list": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "missing_count": 0,
+        "missing_percent": 0.0,
+        "unexpected_percent_total": 19.047619047619047,
+        "unexpected_percent_nonmissing": 19.047619047619047
+      }
+    }
+  ],
+  "freshness": {
+    "latest_published": "2026-08-27",
+    "oldest_published": "2025-07-10",
+    "stale_rows": 2,
+    "total_rows": 21,
+    "stale_ratio": 0.09523809523809523,
+    "threshold_days": 180,
+    "is_fresh": true
+  }
+}

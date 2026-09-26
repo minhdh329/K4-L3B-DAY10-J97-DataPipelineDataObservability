@@ -54,7 +54,7 @@ class LocalEmbeddingIndex:
                     "metadata": {
                         "paper_id": row["paper_id"],
                         "title": row["title"],
-                        "published": row["published"],
+                        "published": str(row["published"]),
                         "authors_joined": row["authors_joined"],
                         "categories_joined": row["categories_joined"],
                         "summary": row["summary"],
