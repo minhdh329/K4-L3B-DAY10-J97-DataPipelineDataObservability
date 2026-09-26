@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import chromadb
 import pandas as pd
@@ -93,22 +94,41 @@ class LocalEmbeddingIndex:
         persist_path.mkdir(parents=True, exist_ok=True)
 
         embedding_model = MiniLMEmbeddings(settings.embedding_model)
+        embeddings = embedding_model.embed_documents([document["content"] for document in documents])
         client = chromadb.PersistentClient(path=str(persist_path))
-        try:
-            client.delete_collection(name=collection_name)
-        except Exception:
-            pass
+        # Populate a staging collection before touching the existing live index.
+        staging_name = f"staging-{uuid4().hex}"
         collection = client.create_collection(
-            name=collection_name,
+            name=staging_name,
             configuration={"hnsw": {"space": "cosine"}},
         )
-        embeddings = embedding_model.embed_documents([document["content"] for document in documents])
-        collection.add(
-            ids=[document["record_id"] for document in documents],
-            embeddings=embeddings,
-            documents=[document["content"] for document in documents],
-            metadatas=[document["metadata"] for document in documents],
-        )
+        try:
+            collection.add(
+                ids=[document["record_id"] for document in documents],
+                embeddings=embeddings,
+                documents=[document["content"] for document in documents],
+                metadatas=[document["metadata"] for document in documents],
+            )
+            if collection.count() != len(documents):
+                raise RuntimeError("Staging index document count does not match the source.")
+            try:
+                previous = client.get_collection(name=collection_name)
+            except chromadb.errors.NotFoundError:
+                previous = None
+            backup_name = f"backup-{uuid4().hex}"
+            if previous is not None:
+                previous.modify(name=backup_name)
+            try:
+                collection.modify(name=collection_name)
+            except Exception:
+                if previous is not None:
+                    previous.modify(name=collection_name)
+                raise
+        except Exception:
+            client.delete_collection(name=staging_name)
+            raise
+        if previous is not None:
+            client.delete_collection(name=backup_name)
 
         manifest_path = embeddings_output_path or settings.paths.embeddings_json
         write_json(

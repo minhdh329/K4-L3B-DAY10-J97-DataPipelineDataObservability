@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import Counter
 from statistics import mean
 import os
 import sys
@@ -35,17 +36,22 @@ def _token_f1(reference: str, prediction: str) -> float:
     pred_tokens = normalize_whitespace(prediction).lower().split()
     if not ref_tokens or not pred_tokens:
         return 0.0
-    ref_set = set(ref_tokens)
-    pred_set = set(pred_tokens)
-    overlap = len(ref_set & pred_set)
+    overlap = sum((Counter(ref_tokens) & Counter(pred_tokens)).values())
     if overlap == 0:
         return 0.0
-    precision = overlap / len(pred_set)
-    recall = overlap / len(ref_set)
+    precision = overlap / len(pred_tokens)
+    recall = overlap / len(ref_tokens)
     return 2 * precision * recall / (precision + recall)
 
 
 def _judge_answer(settings: Settings, question: str, reference: str, prediction: str) -> JudgeVerdict:
+    token_f1 = _token_f1(reference, prediction)
+    score = 5 if token_f1 >= 0.95 else 3 if token_f1 >= 0.5 else 1
+    if os.getenv("RUN_LLM_JUDGE", "").lower() not in {"1", "true", "yes"}:
+        return JudgeVerdict(
+            score=score, correct=score >= 3,
+            reasoning="Heuristic judge based on token F1; no LLM judge used.",
+        )
     prompt = f"""
 Evaluate the model answer against the reference answer.
 
@@ -62,7 +68,6 @@ Return:
         llm = build_llm(settings=settings, temperature=0.0).with_structured_output(JudgeVerdict)
         return llm.invoke(prompt)
     except Exception:
-        score = 5 if _token_f1(reference, prediction) >= 0.95 else 3 if _token_f1(reference, prediction) >= 0.5 else 1
         return JudgeVerdict(
             score=score,
             correct=score >= 3,
@@ -108,6 +113,8 @@ def evaluate_pipeline(
     answers_output_path,
 ) -> EvaluationBundle:
     test_set = read_json(test_set_path)
+    if not test_set:
+        raise ValueError("Evaluation test set must not be empty.")
     answers: list[dict[str, Any]] = []
 
     for item in test_set:
@@ -136,6 +143,9 @@ def evaluate_pipeline(
         "mean_token_f1": mean(item["token_f1"] for item in answers),
         "judge_accuracy": mean(1.0 if item["judge"]["correct"] else 0.0 for item in answers),
         "mean_judge_score": mean(item["judge"]["score"] for item in answers),
+        "llm_judge_enabled": os.getenv("RUN_LLM_JUDGE", "").lower() in {"1", "true", "yes"},
+        "answer_mode": "metadata_extraction",
+        "retrieval_mode": "vector_search_with_exact_title_lookup",
     }
     summary["ragas"] = _run_ragas(settings, answers)
 

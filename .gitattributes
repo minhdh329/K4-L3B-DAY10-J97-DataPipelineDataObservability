@@ -1,0 +1,2 @@
+# Preserve the original API response bytes across Git checkout on Windows.
+data/raw/crossref_response.json -text
