@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG Data Pipeline & Observability Dashboard</title>
+  <!-- Tailwind CSS CDN with fallback -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    .badge-stale { background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+    .badge-fresh { background-color: #dcfce7; color: #166534; border: 1px solid #4ade80; }
+    .badge-corrupted { background-color: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 antialiased bg-slate-50">
+
+  <!-- Top Navigation Bar -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-100">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold text-slate-900 tracking-tight">RAG Data Observability & Recovery</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">Day 10 - J97</span>
+          </div>
+          <p class="text-xs text-slate-500">Phụ trách: Đỗ Trương Thành Ân (Data Foundation & Recovery)</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button id="btn-corrupt" onclick="triggerAction('corrupt')" class="inline-flex items-center px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-sm transition shadow-rose-200 focus:outline-none">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          </svg>
+          Tiêm lỗi dữ liệu (Corrupt)
+        </button>
+
+        <button id="btn-recover" onclick="triggerAction('recover')" class="inline-flex items-center px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-sm transition shadow-emerald-200 focus:outline-none">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          Phục hồi an toàn (Idempotent Repair)
+        </button>
+
+        <button onclick="loadDashboardData()" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition" title="Làm mới dữ liệu">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Toast Banner -->
+  <div id="toast-banner" class="hidden transition-all duration-300"></div>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- KPI Metrics Comparison Cards (3 Trạng thái) -->
+    <section class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span>📊 Bảng Đối Chiếu 3 Trạng Thái: Baseline vs Corrupted vs Repaired</span>
+          </h2>
+          <p class="text-xs text-slate-500">Đo lường sự sụt giảm khi bị Silent Failure và năng lực tự phục hồi 100% từ Raw Snapshot</p>
+        </div>
+        <div id="pipeline-status-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Trạng thái: Đã Phục Hồi Hoàn Tất</span>
+        </div>
+      </div>
+
+      <!-- Metric Cards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mt-4">
+        <!-- 1. Retrieval Hit Rate -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">Retrieval Hit Rate</span>
+          <div class="my-2">
+            <div id="metric-hit-rate" class="text-xl sm:text-2xl font-black text-slate-900">100%</div>
+            <div class="flex items-center text-xs space-x-1 mt-1 font-mono">
+              <span class="text-slate-400">Gốc: 1.0</span>
+              <span class="text-rose-600">→ Lỗi: 0.60</span>
+              <span class="text-emerald-600 font-bold">→ Sửa: 1.0</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-hit-rate" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- 2. Token F1 -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">Mean Token F1</span>
+          <div class="my-2">
+            <div id="metric-token-f1" class="text-xl sm:text-2xl font-black text-slate-900">1.0000</div>
+            <div class="flex items-center text-xs space-x-1 mt-1 font-mono">
+              <span class="text-slate-400">1.0</span>
+              <span class="text-rose-600">→ 0.674</span>
+              <span class="text-emerald-600 font-bold">→ 1.0</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-token-f1" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- 3. LLM Judge Acc -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">LLM Judge Accuracy</span>
+          <div class="my-2">
+            <div id="metric-judge-acc" class="text-xl sm:text-2xl font-black text-slate-900">100%</div>
+            <div class="flex items-center text-xs space-x-1 mt-1 font-mono">
+              <span class="text-slate-400">1.0</span>
+              <span class="text-rose-600">→ 0.70</span>
+              <span class="text-emerald-600 font-bold">→ 1.0</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-judge-acc" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- 4. Mean Judge Score -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">Mean Judge Score</span>
+          <div class="my-2">
+            <div id="metric-judge-score" class="text-xl sm:text-2xl font-black text-slate-900">5.0 / 5.0</div>
+            <div class="flex items-center text-xs space-x-1 mt-1 font-mono">
+              <span class="text-slate-400">5.0</span>
+              <span class="text-rose-600">→ 3.8</span>
+              <span class="text-emerald-600 font-bold">→ 5.0</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-judge-score" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- 5. GX 1.x Quality Gate -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">GX 1.x Quality Gate</span>
+          <div class="my-2">
+            <div id="metric-gx-gate" class="text-sm font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-300 px-2 py-1 rounded text-center">PASSED ✅</div>
+            <div class="text-[11px] text-slate-500 mt-1">4 Expectations kiểm dịch</div>
+          </div>
+          <span id="metric-gx-desc" class="text-[10px] text-emerald-600">Đạt chuẩn cấu trúc</span>
+        </div>
+
+        <!-- 6. Freshness SLA -->
+        <div class="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 flex flex-col justify-between">
+          <span class="text-xs font-medium text-slate-500">Freshness SLA (&le; 25%)</span>
+          <div class="my-2">
+            <div id="metric-sla-status" class="text-sm font-bold text-emerald-700 bg-emerald-100/70 border border-emerald-300 px-2 py-1 rounded text-center">FRESH ✅</div>
+            <div id="metric-stale-ratio" class="text-[11px] text-slate-600 mt-1 font-mono">Stale: 4.17% (1/24 bài)</div>
+          </div>
+          <span class="text-[10px] text-emerald-600">Dưới ngưỡng trần 25%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Corruption Log Card (Những gì đã bị corrupt) -->
+    <section class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 cursor-pointer" onclick="toggleSection('corruption-scenarios-body')">
+        <div class="flex items-center space-x-2">
+          <span class="text-lg">🚨</span>
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">Báo Cáo Chi Tiết: 6 Kịch Bản Dữ Liệu Bị Làm Bẩn (Synthetic Corruption Suite)</h2>
+            <p class="text-xs text-slate-500">Tác nhân gây sụp đổ chỉ số RAG Agent (Mô phỏng sự cố thực tế trong production)</p>
+          </div>
+        </div>
+        <button class="text-xs text-indigo-600 font-semibold hover:underline">Thu gọn / Mở rộng</button>
+      </div>
+
+      <div id="corruption-scenarios-body" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 mt-4">
+        <!-- Scenario 1 -->
+        <div class="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+              <span>🔻</span> 1. Drop 20% bài mới nhất
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">Mất 4 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Mất dữ liệu mới khiến Agent không tìm thấy tài liệu vừa công bố. <code>retrieval_hit_rate</code> tụt từ 1.0 xuống 0.60.</p>
+        </div>
+
+        <!-- Scenario 2 -->
+        <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+              <span>🈳</span> 2. Xóa rỗng Abstract
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">2 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Mô phỏng lỗi cào dữ liệu thiếu abstract. Vi phạm <code>ExpectColumnValueLengthsToBeBetween >= 30</code>.</p>
+        </div>
+
+        <!-- Scenario 3 -->
+        <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+              <span>👾</span> 3. Chèn ký tự rác (Noise)
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">2 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Chèn <code>[NOISE_..._DATA_PIPELINE_ERROR]</code> làm méo vector embedding, câu trả lời bị lẫn ký tự vô nghĩa.</p>
+        </div>
+
+        <!-- Scenario 4 -->
+        <div class="p-3.5 rounded-xl border border-orange-200 bg-orange-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-orange-800 flex items-center gap-1.5">
+              <span>✂️</span> 4. Cắt ngắn Tiêu đề
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-700">2 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Tiêu đề bị cắt < 8 ký tự, làm mất cơ chế tra cứu chính xác theo tiêu đề (Exact Lookup Fallback).</p>
+        </div>
+
+        <!-- Scenario 5 -->
+        <div class="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-rose-800 flex items-center gap-1.5">
+              <span>⏳</span> 5. Lùi ngày xuất bản (Stale)
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">12 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Lùi 365 ngày khiến tỷ lệ quá hạn vọt lên 59.09% (> 25%), kích hoạt cảnh báo đỏ <code>is_fresh = False</code>.</p>
+        </div>
+
+        <!-- Scenario 6 -->
+        <div class="p-3.5 rounded-xl border border-purple-200 bg-purple-50/40">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-purple-800 flex items-center gap-1.5">
+              <span>👥</span> 6. Trùng lặp bản ghi (Duplicate)
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700">2 bài</span>
+          </div>
+          <p class="text-xs text-slate-600">Nhân đôi hàng gây ô nhiễm dữ liệu, vi phạm nghiêm trọng <code>ExpectColumnValuesToBeUnique</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Data Explorer Section (Duyệt từng hàng dữ liệu rõ ràng) -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+      <!-- Tab Control Header -->
+      <div class="px-5 py-4 bg-slate-50/60 border-b border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <!-- Dataset Selector Tabs -->
+        <div class="flex items-center space-x-1.5 bg-slate-200/80 p-1 rounded-xl w-fit">
+          <button id="tab-clean" onclick="switchDatasetTab('clean')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm bg-white text-emerald-800 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Dữ liệu gốc (Clean)</span>
+            <span id="count-clean" class="px-1.5 py-0.2 rounded-full bg-slate-100 text-[10px] text-slate-600">24</span>
+          </button>
+
+          <button id="tab-corrupted" onclick="switchDatasetTab('corrupted')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span>Dữ liệu bị lỗi (Corrupted)</span>
+            <span id="count-corrupted" class="px-1.5 py-0.2 rounded-full bg-slate-100 text-[10px] text-slate-600">22</span>
+          </button>
+
+          <button id="tab-repaired" onclick="switchDatasetTab('repaired')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+            <span>Dữ liệu phục hồi (Repaired)</span>
+            <span id="count-repaired" class="px-1.5 py-0.2 rounded-full bg-slate-100 text-[10px] text-slate-600">24</span>
+          </button>
+
+          <button id="tab-diff" onclick="switchDatasetTab('diff')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+            <span>🔍</span>
+            <span>Đối chiếu 3 trạng thái</span>
+          </button>
+        </div>
+
+        <!-- Search Bar & Filters -->
+        <div class="flex items-center space-x-2">
+          <div class="relative w-full sm:w-64">
+            <input type="text" id="search-input" oninput="renderCurrentDataset()" placeholder="Tìm tiêu đề, tác giả, DOI..." class="w-full text-xs pl-8 pr-3 py-2 bg-white rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition">
+            <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+          <select id="category-filter" onchange="renderCurrentDataset()" class="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+            <option value="ALL">Tất cả lĩnh vực</option>
+            <option value="Artificial Intelligence">Artificial Intelligence</option>
+            <option value="Information Retrieval">Information Retrieval</option>
+            <option value="Database Systems">Database Systems</option>
+            <option value="Software Engineering">Software Engineering</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Dataset Container (Card-based Row-by-Row Layout) -->
+      <div id="dataset-container" class="p-5 space-y-4 custom-scroll max-h-[750px] overflow-y-auto">
+        <!-- Rendered dynamically by JavaScript -->
+        <div class="text-center py-12 text-slate-400">Đang nạp dữ liệu...</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal / Drawer for Embedding Inspection -->
+  <div id="embedding-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+            <span>📄</span> Chuỗi Văn Bản Sinh Vector Embedding (text_for_embedding)
+          </h3>
+          <p id="modal-doi" class="text-xs text-slate-500 font-mono mt-0.5">DOI: -</p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="my-4 flex-1 overflow-y-auto">
+        <p class="text-xs text-slate-500 mb-2">Định dạng 5 phần chuẩn được đưa vào mô hình <code>all-MiniLM-L6-v2</code>:</p>
+        <pre id="modal-embedding-content" class="text-xs font-mono bg-slate-900 text-emerald-400 p-4 rounded-xl overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-800"></pre>
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 flex justify-end">
+        <button onclick="closeModal()" class="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    let globalData = {
+      baseline: [],
+      corrupted: [],
+      repaired: [],
+      corruption_log: {},
+      metrics: {},
+      quality: {},
+      freshness: {},
+      diff: []
+    };
+
+    let activeTab = 'clean'; // 'clean', 'corrupted', 'repaired', 'diff'
+
+    async function loadDashboardData() {
+      try {
+        showToast("Đang nạp dữ liệu mới nhất...", "info");
+        const res = await fetch('/api/data');
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        const data = await res.json();
+        globalData = data;
+
+        // Fetch diff as well
+        const diffRes = await fetch('/api/diff');
+        if (diffRes.ok) {
+          globalData.diff = await diffRes.json();
+        }
+
+        updateHeaderCounts();
+        updateMetricsOverview();
+        renderCurrentDataset();
+        showToast("Dữ liệu đã được đồng bộ!", "success");
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
+        showToast("Lỗi khi tải dữ liệu: " + err.message, "error");
+      }
+    }
+
+    function updateHeaderCounts() {
+      document.getElementById('count-clean').innerText = globalData.baseline.length || 0;
+      document.getElementById('count-corrupted').innerText = globalData.corrupted.length || 0;
+      document.getElementById('count-repaired').innerText = globalData.repaired.length || 0;
+
+      const statusBadge = document.getElementById('pipeline-status-badge');
+      if (globalData.repaired && globalData.repaired.length > 0) {
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5";
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Trạng thái: Đã Phục Hồi Hoàn Hảo (Repaired)</span>';
+      } else if (globalData.corrupted && globalData.corrupted.length > 0) {
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1.5";
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span><span>Trạng thái: Đang Bị Nhiễm Bẩn (Corrupted 🚨)</span>';
+      } else {
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1.5";
+        statusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Trạng thái: Dữ Liệu Sạch (Baseline)</span>';
+      }
+    }
+
+    function updateMetricsOverview() {
+      const bMetrics = (globalData.metrics && globalData.metrics.baseline) || {};
+      const cMetrics = (globalData.metrics && globalData.metrics.corrupted) || {};
+      const rMetrics = (globalData.metrics && globalData.metrics.repaired) || {};
+
+      const currentHit = rMetrics.retrieval_hit_rate ?? bMetrics.retrieval_hit_rate ?? 1.0;
+      const currentF1 = rMetrics.mean_token_f1 ?? bMetrics.mean_token_f1 ?? 1.0;
+      const currentAcc = rMetrics.judge_accuracy ?? bMetrics.judge_accuracy ?? 1.0;
+      const currentScore = rMetrics.mean_judge_score ?? bMetrics.mean_judge_score ?? 5.0;
+
+      document.getElementById('metric-hit-rate').innerText = (currentHit * 100).toFixed(0) + '%';
+      document.getElementById('bar-hit-rate').style.width = (currentHit * 100) + '%';
+
+      document.getElementById('metric-token-f1').innerText = Number(currentF1).toFixed(4);
+      document.getElementById('bar-token-f1').style.width = (currentF1 * 100) + '%';
+
+      document.getElementById('metric-judge-acc').innerText = (currentAcc * 100).toFixed(0) + '%';
+      document.getElementById('bar-judge-acc').style.width = (currentAcc * 100) + '%';
+
+      document.getElementById('metric-judge-score').innerText = Number(currentScore).toFixed(1) + ' / 5.0';
+      document.getElementById('bar-judge-score').style.width = ((currentScore / 5) * 100) + '%';
+    }
+
+    function switchDatasetTab(tabName) {
+      activeTab = tabName;
+      const tabs = ['clean', 'corrupted', 'repaired', 'diff'];
+
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (t === tabName) {
+          btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-sm bg-white text-slate-900 border border-slate-300 flex items-center gap-1.5";
+        } else {
+          btn.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition text-slate-600 hover:text-slate-900 flex items-center gap-1.5";
+        }
+      });
+
+      renderCurrentDataset();
+    }
+
+    function renderCurrentDataset() {
+      const container = document.getElementById('dataset-container');
+      const searchQuery = (document.getElementById('search-input').value || "").toLowerCase().trim();
+      const categoryFilter = document.getElementById('category-filter').value;
+
+      if (activeTab === 'diff') {
+        renderDiffView(container, searchQuery, categoryFilter);
+        return;
+      }
+
+      let records = [];
+      let badgeTheme = "clean";
+
+      if (activeTab === 'clean') {
+        records = globalData.baseline || [];
+        badgeTheme = "clean";
+      } else if (activeTab === 'corrupted') {
+        records = globalData.corrupted || [];
+        badgeTheme = "corrupted";
+      } else if (activeTab === 'repaired') {
+        records = globalData.repaired || [];
+        badgeTheme = "repaired";
+      }
+
+      // Filter records
+      let filtered = records.filter(r => {
+        const matchCategory = categoryFilter === 'ALL' || (r.categories && r.categories.includes(categoryFilter));
+        const matchSearch = !searchQuery ||
+          (r.title && r.title.toLowerCase().includes(searchQuery)) ||
+          (r.paper_id && r.paper_id.toLowerCase().includes(searchQuery)) ||
+          (r.authors_joined && r.authors_joined.toLowerCase().includes(searchQuery)) ||
+          (r.summary && r.summary.toLowerCase().includes(searchQuery));
+        return matchCategory && matchSearch;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            <svg class="w-10 h-10 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <p class="text-xs text-slate-500 font-medium">Không tìm thấy bản ghi nào phù hợp với bộ lọc.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Render cards
+      let html = "";
+      filtered.forEach((r, idx) => {
+        const isStale = (r.age_days || 0) > 180;
+        const staleBadge = isStale
+          ? `<span class="badge-stale px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1"><span>🚨</span> ${r.age_days} ngày (Quá hạn SLA)</span>`
+          : `<span class="badge-fresh px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1"><span>✅</span> ${r.age_days} ngày (Đạt SLA)</span>`;
+
+        // Check corruption anomalies
+        let corruptionBadges = "";
+        if (activeTab === 'corrupted') {
+          if (!r.summary || r.summary.trim() === "") {
+            corruptionBadges += `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-300">🈳 Abstract xóa rỗng</span> `;
+          } else if (r.summary.includes("[NOISE_")) {
+            corruptionBadges += `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-300">👾 Chèn ký tự rác</span> `;
+          }
+          if ((r.title || "").length < 8) {
+            corruptionBadges += `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-orange-100 text-orange-700 border border-orange-300">✂️ Tiêu đề cắt ngắn</span> `;
+          }
+          if (isStale && (r.published || "").startsWith("2025")) {
+            corruptionBadges += `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-purple-100 text-purple-700 border border-purple-300">⏳ Lùi ngày 365d</span> `;
+          }
+        }
+
+        const categoryTag = `<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${r.primary_category || (r.categories ? r.categories[0] : 'Academic')}</span>`;
+
+        const authorsHtml = (r.authors || []).map(a =>
+          `<span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">👤 ${a}</span>`
+        ).join(" ");
+
+        let summaryDisplay = r.summary || `<em class="text-rose-600 font-semibold">[CẢNH BÁO: Tóm tắt bài báo đã bị xóa rỗng bởi kịch bản blank_summary]</em>`;
+        if (typeof r.summary === 'string' && r.summary.includes("[NOISE_")) {
+          summaryDisplay = summaryDisplay.replace(/(\[NOISE_[^\]]+\])/g, '<mark class="bg-rose-200 text-rose-900 px-1 py-0.5 rounded font-mono font-bold">$1</mark>');
+        }
+
+        html += `
+          <div class="bg-white rounded-xl p-5 border border-slate-200 hover:border-indigo-300 transition-all shadow-sm hover:shadow group">
+            <!-- Header Row: Meta badges -->
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2.5 border-b border-slate-100">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-mono font-bold text-slate-400">#${String(idx + 1).padStart(2, '0')}</span>
+                <a href="${r.abs_url || 'https://doi.org/' + r.paper_id}" target="_blank" class="text-xs font-mono font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                  ${r.paper_id}
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                </a>
+                <span class="text-slate-300">•</span>
+                <span class="text-xs text-slate-500 font-medium">📅 ${r.published || 'N/A'}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                ${corruptionBadges}
+                ${staleBadge}
+                ${categoryTag}
+              </div>
+            </div>
+
+            <!-- Title -->
+            <h3 class="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition tracking-tight mb-2">
+              ${r.title}
+            </h3>
+
+            <!-- Authors -->
+            <div class="flex flex-wrap items-center gap-1.5 mb-3">
+              <span class="text-xs font-semibold text-slate-400 mr-1">Tác giả:</span>
+              ${authorsHtml || '<span class="text-xs text-slate-400 italic">Không có tác giả</span>'}
+            </div>
+
+            <!-- Summary / Abstract -->
+            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-100 text-xs text-slate-700 leading-relaxed mb-3">
+              <div class="font-semibold text-slate-500 text-[11px] mb-1 uppercase tracking-wider flex items-center justify-between">
+                <span>Tóm tắt (Abstract)</span>
+                <span class="text-[10px] text-slate-400 font-mono">${(r.summary || '').length} ký tự</span>
+              </div>
+              <div>${summaryDisplay}</div>
+            </div>
+
+            <!-- Footer: Actions & Inspect Embedding -->
+            <div class="flex items-center justify-between pt-2 text-xs">
+              <div class="text-[11px] text-slate-400 font-mono">
+                Lineage: Crossref REST API
+              </div>
+              <button onclick="openEmbeddingModal('${r.paper_id}')" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 font-semibold text-xs py-1 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                Xem chuỗi Text For Embedding (5 phần)
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function renderDiffView(container, searchQuery, categoryFilter) {
+      const diffList = globalData.diff || [];
+      if (diffList.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-slate-400">Chưa có dữ liệu đối chiếu.</div>`;
+        return;
+      }
+
+      let filtered = diffList.filter(item => {
+        const matchSearch = !searchQuery ||
+          (item.title && item.title.toLowerCase().includes(searchQuery)) ||
+          (item.paper_id && item.paper_id.toLowerCase().includes(searchQuery));
+        return matchSearch;
+      });
+
+      let html = `
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase text-[11px]">
+                <th class="py-3 px-3 w-12">#</th>
+                <th class="py-3 px-3 w-40">DOI / Paper ID</th>
+                <th class="py-3 px-4 w-1/3">Dữ liệu gốc (Baseline)</th>
+                <th class="py-3 px-4 w-1/3">Khi bị lỗi (Corrupted)</th>
+                <th class="py-3 px-4 w-1/3">Sau phục hồi (Repaired)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+      `;
+
+      filtered.forEach((item, idx) => {
+        const base = item.baseline || {};
+        const corr = item.corrupted;
+        const rep = item.repaired || {};
+
+        let corrContent = "";
+        let corrRowClass = "";
+
+        if (!corr) {
+          corrContent = `
+            <div class="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 font-bold">
+              ❌ [ĐÃ BỊ XÓA BẢN GHI] - Mất bài mới do drop 20%
+            </div>
+          `;
+          corrRowClass = "bg-rose-50/20";
+        } else {
+          let anomalies = [];
+          if (corr.title !== base.title) {
+            anomalies.push(`<span class="text-rose-700 font-bold">Tiêu đề: "${corr.title}"</span>`);
+          }
+          if (corr.summary !== base.summary) {
+            if (!corr.summary) {
+              anomalies.push(`<span class="text-rose-700 font-bold">Summary: [Xóa rỗng]</span>`);
+            } else {
+              anomalies.push(`<span class="text-amber-700 font-bold">Summary: [Chèn noise rác]</span>`);
+            }
+          }
+          if (corr.published !== base.published) {
+            anomalies.push(`<span class="text-purple-700 font-bold">Ngày: ${corr.published} (Lùi 365d)</span>`);
+          }
+
+          corrContent = `
+            <div class="space-y-1">
+              <div class="font-medium text-slate-800">${corr.title}</div>
+              <div class="text-[11px] text-slate-500 line-clamp-2">${corr.summary || '<em>Rỗng</em>'}</div>
+              <div class="text-[11px] font-mono text-slate-400">📅 ${corr.published}</div>
+              ${anomalies.length > 0 ? '<div class="pt-1 text-[11px]">' + anomalies.join(" • ") + '</div>' : '<span class="text-slate-400">Không đổi</span>'}
+            </div>
+          `;
+        }
+
+        const repContent = `
+          <div class="space-y-1">
+            <div class="font-medium text-slate-800 flex items-center justify-between">
+              <span>${rep.title || 'N/A'}</span>
+              <span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">Khớp 100%</span>
+            </div>
+            <div class="text-[11px] text-slate-500 line-clamp-2">${rep.summary || ''}</div>
+            <div class="text-[11px] font-mono text-slate-400">📅 ${rep.published || ''} (Khôi phục)</div>
+          </div>
+        `;
+
+        html += `
+          <tr class="hover:bg-slate-50 transition ${corrRowClass}">
+            <td class="py-3 px-3 font-mono font-bold text-slate-400">${idx + 1}</td>
+            <td class="py-3 px-3 font-mono text-indigo-600 font-bold">${item.paper_id}</td>
+            <td class="py-3 px-4">
+              <div class="font-medium text-slate-800">${base.title}</div>
+              <div class="text-[11px] text-slate-500 line-clamp-2">${base.summary}</div>
+              <div class="text-[11px] font-mono text-slate-400">📅 ${base.published}</div>
+            </td>
+            <td class="py-3 px-4 border-x border-slate-100">${corrContent}</td>
+            <td class="py-3 px-4">${repContent}</td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+    }
+
+    function openEmbeddingModal(paperId) {
+      const records = globalData[activeTab] || globalData.baseline || [];
+      const item = records.find(r => r.paper_id === paperId) || (globalData.baseline || []).find(r => r.paper_id === paperId);
+
+      if (!item) return;
+
+      document.getElementById('modal-doi').innerText = 'DOI: ' + item.paper_id + ' | Tiêu đề: ' + item.title;
+      document.getElementById('modal-embedding-content').innerText = item.text_for_embedding || "Không tìm thấy chuỗi embedding.";
+      document.getElementById('embedding-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('embedding-modal').classList.add('hidden');
+    }
+
+    function toggleSection(id) {
+      const el = document.getElementById(id);
+      el.classList.toggle('hidden');
+    }
+
+    async function triggerAction(actionType) {
+      const btn = document.getElementById(actionType === 'corrupt' ? 'btn-corrupt' : 'btn-recover');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Đang xử lý...`;
+
+      showToast(actionType === 'corrupt' ? "Đang tiêm 6 kịch bản lỗi và tái tạo vector store..." : "Đang đọc bản raw snapshot và tự phục hồi...", "info");
+
+      try {
+        const res = await fetch(`/api/action/${actionType}`, { method: 'POST' });
+        const result = await res.json();
+
+        if (result.success) {
+          showToast(result.message, "success");
+          if (actionType === 'corrupt') {
+            switchDatasetTab('corrupted');
+          } else {
+            switchDatasetTab('repaired');
+          }
+          await loadDashboardData();
+        } else {
+          showToast("Lỗi: " + (result.error || "Không thể thực hiện"), "error");
+        }
+      } catch (err) {
+        showToast("Lỗi kết nối: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    function showToast(message, type = "info") {
+      const banner = document.getElementById('toast-banner');
+      let bg = "bg-indigo-600 text-white";
+      if (type === "success") bg = "bg-emerald-600 text-white";
+      if (type === "error") bg = "bg-rose-600 text-white";
+
+      banner.className = `px-4 py-2.5 text-xs font-semibold text-center transition-all ${bg}`;
+      banner.innerText = message;
+      banner.classList.remove('hidden');
+
+      setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 4000);
+    }
+
+    // Auto load on start
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDashboardData();
+    });
+  </script>
+</body>
+</html>
