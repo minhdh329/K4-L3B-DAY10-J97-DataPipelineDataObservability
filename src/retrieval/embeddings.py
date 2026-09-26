@@ -8,7 +8,12 @@ from sentence_transformers import SentenceTransformer
 
 @lru_cache(maxsize=4)
 def _load_model(model_name: str) -> SentenceTransformer:
-    return SentenceTransformer(model_name)
+    """Load a previously downloaded model without a network metadata check.
+
+    The lab must run from its local artifacts after the initial setup, including
+    during a Crossref fallback or when a classroom network is unavailable.
+    """
+    return SentenceTransformer(model_name, local_files_only=True)
 
 
 class MiniLMEmbeddings(Embeddings):
@@ -16,7 +21,9 @@ class MiniLMEmbeddings(Embeddings):
         self.model = _load_model(model_name)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
+        # Keep peak memory small for classroom machines; Chroma receives the
+        # same normalized vectors regardless of this batching choice.
+        embeddings = self.model.encode(texts, batch_size=1, normalize_embeddings=True, show_progress_bar=False)
         return embeddings.tolist()
 
     def embed_query(self, text: str) -> list[float]:
