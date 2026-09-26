@@ -6,11 +6,11 @@
 
 | Thông tin         | Nội dung                  |
 | ------------------ | -------------------------- |
-| Họ và tên       | Đỗ Trương Thành Ân            |
+| Họ và tên       | Đỗ Trương Thành Ân             |
 | MSSV               | 2A202602899                     |
-| Khóa/Lớp         | K4 L3B              |
+| Khóa/Lớp         | K4-L3B              |
 | Tên nhóm         | J97     |
-| Vai trò chính    | [Vai trò]                 |
+| Vai trò chính    | Data Foundation & Recovery |
 | Repository         | [Đường dẫn repository] |
 | Ngày hoàn thành | [YYYY-MM-DD]               |
 

@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-09-26T03:35:19.336966+00:00",
+  "input_records_count": 24,
+  "corrupted_records_count": 22,
+  "scenarios": [
+    {
+      "type": "drop_latest_records",
+      "description": "Drop 20% cac ban ghi moi nhat (mat du lieu tuoi)",
+      "affected_count": 4,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671812",
+        "10.1145/3637528.3671808",
+        "10.1145/3637528.3671804",
+        "10.1145/3637528.3671807"
+      ]
+    },
+    {
+      "type": "blank_summary",
+      "description": "Xoa trang phan summary (mo phong loi cao du lieu rong)",
+      "affected_count": 2,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671802",
+        "10.1145/3637528.3671824"
+      ]
+    },
+    {
+      "type": "inject_noise",
+      "description": "Chen chuoi ky tu rac vo nghia vao summary",
+      "affected_count": 2,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671823",
+        "10.1145/3637528.3671822"
+      ]
+    },
+    {
+      "type": "truncate_title",
+      "description": "Cat ngan tieu de xuong duoi 8 ky tu",
+      "affected_count": 2,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671821",
+        "10.1145/3637528.3671810"
+      ]
+    },
+    {
+      "type": "stale_date",
+      "description": "Lui ngay xuat ban ve 365 ngay truoc (vi pham Freshness SLA)",
+      "affected_count": 12,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671820",
+        "10.1145/3637528.3671819",
+        "10.1145/3637528.3671818",
+        "10.1145/3637528.3671817",
+        "10.1145/3637528.3671816",
+        "10.1145/3637528.3671815",
+        "10.1145/3637528.3671814",
+        "10.1145/3637528.3671813",
+        "10.1145/3637528.3671801",
+        "10.1145/3637528.3671811",
+        "10.1145/3637528.3671806",
+        "10.1145/3637528.3671809"
+      ]
+    },
+    {
+      "type": "duplicate_rows",
+      "description": "Nhan doi cac dong de tao du lieu trung lap (vi pham tinh duy nhat)",
+      "affected_count": 2,
+      "affected_paper_ids": [
+        "10.1145/3637528.3671802",
+        "10.1145/3637528.3671824"
+      ]
+    }
+  ]
+}
